@@ -1,0 +1,1049 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cisco Packet Tracer PKA Profile & Time 修改器</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons CDN -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#eff6ff',
+                            100: '#dbeafe',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased min-h-screen py-10 px-4 flex justify-center">
+
+<div class="max-w-xl w-full flex flex-col gap-6">
+    <!-- Header -->
+    <div class="text-center space-y-1.5">
+        <div class="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-blue-600 text-white shadow-md shadow-blue-500/20 mb-1">
+            <i data-lucide="shield-check" class="w-6 h-6"></i>
+        </div>
+        <h1 class="text-2xl font-bold tracking-tight text-slate-900">Packet Tracer PKA 修改器</h1>
+        <p class="text-sm text-slate-500">純前端本機解析與加解密，快速自訂 User Profile 與活動計時</p>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="hidden transition-all duration-300 p-3.5 rounded-xl text-sm font-medium border shadow-sm"></div>
+
+    <!-- Step 1: File Dropzone -->
+    <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/80">
+        <div class="flex items-center gap-2 font-semibold text-slate-900 mb-3 text-sm">
+            <i data-lucide="file-up" class="w-4 h-4 text-blue-600"></i>
+            <span>選取目標檔案</span>
+        </div>
+        
+        <div id="dropzone" class="border-2 border-dashed border-slate-300 hover:border-blue-500 bg-slate-50/60 hover:bg-blue-50/40 rounded-xl p-7 text-center transition cursor-pointer group">
+            <i data-lucide="upload-cloud" class="w-10 h-10 text-slate-400 group-hover:text-blue-600 mx-auto mb-2 transition"></i>
+            <div class="text-sm font-semibold text-slate-700 group-hover:text-blue-600 transition">點擊選取檔案，或將檔案拖曳至此處</div>
+            <div class="text-xs text-slate-400 mt-1">支援 Cisco Packet Tracer .pka 與 .pkt 活動拓撲檔</div>
+            <input type="file" id="fileInput" accept=".pka,.pkt" class="hidden">
+        </div>
+
+        <div id="fileInfo" class="hidden mt-3 p-3 bg-blue-50/70 border border-blue-200 rounded-xl text-xs text-blue-800 justify-between items-center">
+            <div class="flex items-center gap-2 truncate font-medium">
+                <i data-lucide="file-check-2" class="w-4 h-4 text-blue-600 flex-shrink-0"></i>
+                <span id="fileName" class="truncate">未選擇檔案</span>
+            </div>
+            <span id="fileSize" class="text-blue-600 font-semibold flex-shrink-0 ml-2"></span>
+        </div>
+    </div>
+
+    <!-- Auto Complete Card -->
+    <div id="autoCompleteCard" class="hidden bg-gradient-to-r from-blue-50/90 via-indigo-50/90 to-purple-50/90 rounded-2xl p-5 border border-blue-200/80 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all">
+        <div class="space-y-1">
+            <div class="flex items-center gap-1.5 text-xs font-bold text-blue-900">
+                <i data-lucide="sparkles" class="w-4 h-4 text-blue-600"></i>
+                <span>題目解答自動同步 (Auto-Complete)</span>
+                <span id="autoBadge" class="hidden px-2 py-0.5 text-[10px] font-semibold bg-emerald-100 text-emerald-800 rounded-full border border-emerald-300">已套用 100% 解答</span>
+            </div>
+            <p class="text-[11px] text-slate-500">已在題目中偵測到標準解答拓撲，可一鍵自動完成所有連線與設備配置</p>
+        </div>
+        <button type="button" id="btnAutoComplete" class="px-4 py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 active:scale-[0.98] rounded-xl shadow-sm shadow-blue-500/20 whitespace-nowrap transition flex items-center justify-center gap-1.5">
+            <i data-lucide="wand-2" class="w-3.5 h-3.5"></i>
+            <span>一鍵自動完成題目</span>
+        </button>
+    </div>
+
+    <!-- Step 2: User Profile Editor -->
+    <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/80 space-y-4">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2 font-semibold text-slate-900 text-sm">
+                <i data-lucide="user" class="w-4 h-4 text-blue-600"></i>
+                <span>個人資料設定 (User Profile)</span>
+            </div>
+            <div class="flex gap-2">
+                <button type="button" id="btnResetGuest" class="px-2.5 py-1 text-xs font-medium rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition">
+                    設為 Guest
+                </button>
+                <button type="button" id="btnUnlockProfile" class="px-2.5 py-1 text-xs font-medium rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 transition">
+                    一鍵解鎖
+                </button>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1" for="profileName">姓名 (Name)</label>
+                <input type="text" id="profileName" class="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm text-slate-800 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition outline-none" placeholder="請先載入檔案">
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1" for="profileEmail">E-Mail / 學號</label>
+                <input type="text" id="profileEmail" class="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm text-slate-800 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition outline-none" placeholder="請先載入檔案">
+            </div>
+        </div>
+
+        <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1" for="profileInfo">附加資訊 (Additional Info)</label>
+            <textarea id="profileInfo" rows="2" class="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm text-slate-800 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition outline-none resize-none" placeholder="選填附加備註資訊"></textarea>
+        </div>
+    </div>
+
+    <!-- Step 3: Timer Editor -->
+    <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/80 space-y-4">
+        <div class="flex items-center gap-2 font-semibold text-slate-900 text-sm">
+            <i data-lucide="clock" class="w-4 h-4 text-blue-600"></i>
+            <span>活動計時設定 (Time Elapsed / 經過時間)</span>
+        </div>
+
+        <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1.5">經過時間 (時 : 分 : 秒)</label>
+            <div class="flex items-center gap-2">
+                <div class="flex flex-col items-center">
+                    <input type="number" id="timeHours" min="0" max="999" value="0" class="w-20 text-center font-bold text-base rounded-xl border border-slate-200 bg-slate-50/50 p-2 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition outline-none">
+                    <span class="text-[11px] font-semibold text-slate-400 mt-1">時 (HH)</span>
+                </div>
+                <span class="text-xl font-bold text-slate-400 -mt-4">:</span>
+                <div class="flex flex-col items-center">
+                    <input type="number" id="timeMins" min="0" max="59" value="0" class="w-20 text-center font-bold text-base rounded-xl border border-slate-200 bg-slate-50/50 p-2 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition outline-none">
+                    <span class="text-[11px] font-semibold text-slate-400 mt-1">分 (MM)</span>
+                </div>
+                <span class="text-xl font-bold text-slate-400 -mt-4">:</span>
+                <div class="flex flex-col items-center">
+                    <input type="number" id="timeSecs" min="0" max="59" value="0" class="w-20 text-center font-bold text-base rounded-xl border border-slate-200 bg-slate-50/50 p-2 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition outline-none">
+                    <span class="text-[11px] font-semibold text-slate-400 mt-1">秒 (SS)</span>
+                </div>
+                <div class="text-xs text-slate-500 font-medium ml-2 -mt-4" id="msDisplay">總計：0 毫秒</div>
+            </div>
+
+            <!-- Presets -->
+            <div class="flex flex-wrap gap-1.5 mt-2.5">
+                <button type="button" class="px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition" onclick="setPresetTime(0, 0, 0)">歸零 (00:00:00)</button>
+                <button type="button" class="px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition" onclick="setPresetTime(0, 10, 0)">10 分鐘</button>
+                <button type="button" class="px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition" onclick="setPresetTime(0, 15, 0)">15 分鐘</button>
+                <button type="button" class="px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition" onclick="setPresetTime(0, 20, 0)">20 分鐘</button>
+                <button type="button" class="px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition" onclick="setPresetTime(0, 30, 0)">30 分鐘</button>
+            </div>
+        </div>
+
+        <div class="pt-2 border-t border-slate-100">
+            <label class="block text-xs font-semibold text-slate-700 mb-1" for="startTimeInput">開始時間戳記 (Start Timestamp)</label>
+            <div class="flex gap-2">
+                <input type="text" id="startTimeInput" class="flex-1 rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm text-slate-800 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition outline-none" placeholder="例如：2026-10-10 12:00:00">
+                <button type="button" id="btnNowTime" class="px-3 py-2 text-xs font-medium rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 whitespace-nowrap transition">現在時間</button>
+                <button type="button" id="btnCalcTime" class="px-3 py-2 text-xs font-medium rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 whitespace-nowrap transition">依經過時間推算</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Step 4: Options -->
+    <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/80 space-y-4">
+        <div class="flex items-center gap-2 font-semibold text-slate-900 text-sm">
+            <i data-lucide="sliders" class="w-4 h-4 text-blue-600"></i>
+            <span>活動權限與進階保護 (Options)</span>
+        </div>
+
+        <label class="flex items-start gap-3 cursor-pointer group">
+            <input type="checkbox" id="checkLocked" class="mt-0.5 w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300">
+            <div>
+                <div class="text-xs font-semibold text-slate-800 group-hover:text-blue-600 transition">鎖定設定檔 (USER_PROFILE_LOCKED)</div>
+                <div class="text-[11px] text-slate-400">取消勾選後，學生在 Packet Tracer 內開啟該題即可重新編輯姓名與學號</div>
+            </div>
+        </label>
+
+        <label class="flex items-start gap-3 cursor-pointer group">
+            <input type="checkbox" id="checkNoGuest" class="mt-0.5 w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300">
+            <div>
+                <div class="text-xs font-semibold text-slate-800 group-hover:text-blue-600 transition">禁止訪客登入 (USER_PROFILE_NOGUEST)</div>
+                <div class="text-[11px] text-slate-400">勾選時強制要求必須填妥 profile 才能開始答題</div>
+            </div>
+        </label>
+
+        <label class="flex items-start gap-3 cursor-pointer group">
+            <input type="checkbox" id="checkApplyAll" class="mt-0.5 w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300">
+            <div>
+                <div class="text-xs font-semibold text-slate-800 group-hover:text-blue-600 transition">同步更新拓撲範本中的 Profile</div>
+                <div class="text-[11px] text-slate-400">預設僅更新使用者作答設定檔 (推薦維持未勾選)</div>
+            </div>
+        </label>
+    </div>
+
+    <!-- Step 5: Download Button -->
+    <button type="button" id="btnDownload" disabled class="w-full py-3.5 px-5 rounded-2xl font-bold text-white bg-blue-600 hover:bg-blue-700 active:scale-[0.99] shadow-md shadow-blue-500/20 disabled:bg-slate-300 disabled:shadow-none disabled:cursor-not-allowed transition flex items-center justify-center gap-2 text-base">
+        <i data-lucide="download" class="w-5 h-5"></i>
+        <span>下載修改後的 PKA 檔案</span>
+    </button>
+</div>
+
+<!-- ================= Pure JS Cryptography Engine ================= -->
+<script>
+// Initialize Lucide icons
+lucide.createIcons();
+
+/* -------------------------------------------------------------
+   Twofish Implementation (Pure JavaScript 32-bit Integer Math)
+------------------------------------------------------------- */
+function rotr32(x, n) {
+    return ((x >>> n) | (x << (32 - n))) >>> 0;
+}
+
+function rotl32(x, n) {
+    return ((x << n) | (x >>> (32 - n))) >>> 0;
+}
+
+function byte(x, n) {
+    return (x >>> (8 * n)) & 0xff;
+}
+
+const tab_5b = [0, 90, 180, 238];
+const tab_ef = [0, 238, 180, 90];
+const ror4 = [0, 8, 1, 9, 2, 10, 3, 11, 4, 12, 5, 13, 6, 14, 7, 15];
+const ashx = [0, 9, 2, 11, 4, 13, 6, 15, 8, 1, 10, 3, 12, 5, 14, 7];
+const qt0 = [
+    [8, 1, 7, 13, 6, 15, 3, 2, 0, 11, 5, 9, 14, 12, 10, 4],
+    [2, 8, 11, 13, 15, 7, 6, 14, 3, 1, 9, 4, 0, 10, 12, 5]
+];
+const qt1 = [
+    [14, 12, 11, 8, 1, 2, 3, 5, 15, 4, 10, 6, 7, 0, 9, 13],
+    [1, 14, 2, 11, 4, 12, 3, 7, 6, 13, 10, 5, 15, 9, 0, 8]
+];
+const qt2 = [
+    [11, 10, 5, 14, 6, 13, 9, 0, 12, 8, 15, 3, 2, 4, 7, 1],
+    [4, 12, 7, 5, 1, 6, 9, 10, 0, 14, 13, 8, 2, 11, 3, 15]
+];
+const qt3 = [
+    [13, 7, 15, 4, 1, 2, 6, 14, 9, 11, 3, 0, 8, 5, 12, 10],
+    [11, 9, 5, 1, 12, 3, 13, 14, 6, 4, 7, 15, 2, 0, 8, 10]
+];
+
+function qp(n, x) {
+    const a0 = x >>> 4;
+    const b0 = x & 15;
+    const a1 = a0 ^ b0;
+    const b1 = ror4[b0] ^ ashx[a0];
+    const a2 = qt0[n][a1];
+    const b2 = qt1[n][b1];
+    const a3 = a2 ^ b2;
+    const b3 = ror4[b2] ^ ashx[a2];
+    const a4 = qt2[n][a3];
+    const b4 = qt3[n][b3];
+    return ((b4 << 4) | a4) & 0xff;
+}
+
+class Twofish {
+    constructor(key) {
+        this.k_len = 0;
+        this.l_key = new Uint32Array(40);
+        this.s_key = new Uint32Array(4);
+        this.q_tab = [new Uint8Array(256), new Uint8Array(256)];
+        this.m_tab = [new Uint32Array(256), new Uint32Array(256), new Uint32Array(256), new Uint32Array(256)];
+        this.mk_tab = [new Uint32Array(256), new Uint32Array(256), new Uint32Array(256), new Uint32Array(256)];
+
+        this.gen_qtab();
+        this.gen_mtab();
+
+        if (key) {
+            this.set_key(key);
+        }
+    }
+
+    gen_qtab() {
+        for (let i = 0; i < 256; i++) {
+            this.q_tab[0][i] = qp(0, i);
+            this.q_tab[1][i] = qp(1, i);
+        }
+    }
+
+    gen_mtab() {
+        for (let i = 0; i < 256; i++) {
+            let f01 = this.q_tab[1][i];
+            let f5b = ((f01 ^ (f01 >>> 2) ^ tab_5b[f01 & 3])) & 0xff;
+            let fef = ((f01 ^ (f01 >>> 1) ^ (f01 >>> 2) ^ tab_ef[f01 & 3])) & 0xff;
+            this.m_tab[0][i] = (f01 | (f5b << 8) | (fef << 16) | (fef << 24)) >>> 0;
+            this.m_tab[2][i] = (f5b | (fef << 8) | (f01 << 16) | (fef << 24)) >>> 0;
+
+            f01 = this.q_tab[0][i];
+            f5b = ((f01 ^ (f01 >>> 2) ^ tab_5b[f01 & 3])) & 0xff;
+            fef = ((f01 ^ (f01 >>> 1) ^ (f01 >>> 2) ^ tab_ef[f01 & 3])) & 0xff;
+            this.m_tab[1][i] = (fef | (fef << 8) | (f5b << 16) | (f01 << 24)) >>> 0;
+            this.m_tab[3][i] = (f5b | (f01 << 8) | (fef << 16) | (f5b << 24)) >>> 0;
+        }
+    }
+
+    mds_rem(p0, p1) {
+        for (let i = 0; i < 8; i++) {
+            const t = p1 >>> 24;
+            p1 = (((p1 << 8) >>> 0) | (p0 >>> 24)) >>> 0;
+            p0 = (p0 << 8) >>> 0;
+            let u = (t << 1) >>> 0;
+            if (t & 0x80) {
+                u = (u ^ 0x0000014d) >>> 0;
+            }
+            p1 = (p1 ^ t ^ ((u << 16) >>> 0)) >>> 0;
+            u = (u ^ (t >>> 1)) >>> 0;
+            if (t & 0x01) {
+                u = (u ^ (0x0000014d >>> 1)) >>> 0;
+            }
+            p1 = (p1 ^ ((u << 24) >>> 0) ^ ((u << 8) >>> 0)) >>> 0;
+        }
+        return p1 >>> 0;
+    }
+
+    h_fun(x, key) {
+        let b0 = byte(x, 0);
+        let b1 = byte(x, 1);
+        let b2 = byte(x, 2);
+        let b3 = byte(x, 3);
+        if (this.k_len >= 4) {
+            b0 = this.q_tab[1][b0] ^ byte(key[3], 0);
+            b1 = this.q_tab[0][b1] ^ byte(key[3], 1);
+            b2 = this.q_tab[0][b2] ^ byte(key[3], 2);
+            b3 = this.q_tab[1][b3] ^ byte(key[3], 3);
+        }
+        if (this.k_len >= 3) {
+            b0 = this.q_tab[1][b0] ^ byte(key[2], 0);
+            b1 = this.q_tab[1][b1] ^ byte(key[2], 1);
+            b2 = this.q_tab[0][b2] ^ byte(key[2], 2);
+            b3 = this.q_tab[0][b3] ^ byte(key[2], 3);
+        }
+        if (this.k_len >= 2) {
+            b0 = this.q_tab[0][this.q_tab[0][b0] ^ byte(key[1], 0)] ^ byte(key[0], 0);
+            b1 = this.q_tab[0][this.q_tab[1][b1] ^ byte(key[1], 1)] ^ byte(key[0], 1);
+            b2 = this.q_tab[1][this.q_tab[0][b2] ^ byte(key[1], 2)] ^ byte(key[0], 2);
+            b3 = this.q_tab[1][this.q_tab[1][b3] ^ byte(key[1], 3)] ^ byte(key[0], 3);
+        }
+        return (this.m_tab[0][b0] ^ this.m_tab[1][b1] ^ this.m_tab[2][b2] ^ this.m_tab[3][b3]) >>> 0;
+    }
+
+    gen_mk_tab(key) {
+        if (this.k_len === 2) {
+            for (let i = 0; i < 256; i++) {
+                const by = i & 0xff;
+                this.mk_tab[0][i] = this.m_tab[0][this.q_tab[0][this.q_tab[0][by] ^ byte(key[1], 0)] ^ byte(key[0], 0)];
+                this.mk_tab[1][i] = this.m_tab[1][this.q_tab[0][this.q_tab[1][by] ^ byte(key[1], 1)] ^ byte(key[0], 1)];
+                this.mk_tab[2][i] = this.m_tab[2][this.q_tab[1][this.q_tab[0][by] ^ byte(key[1], 2)] ^ byte(key[0], 2)];
+                this.mk_tab[3][i] = this.m_tab[3][this.q_tab[1][this.q_tab[1][by] ^ byte(key[1], 3)] ^ byte(key[0], 3)];
+            }
+        }
+    }
+
+    set_key(keyBytes) {
+        const key_len = keyBytes.length;
+        this.k_len = (key_len * 8) / 64; // for 16-byte key: 2
+
+        const key_words = new Uint32Array(key_len / 4);
+        const dv = new DataView(keyBytes.buffer, keyBytes.byteOffset, keyBytes.byteLength);
+        for (let i = 0; i < key_words.length; i++) {
+            key_words[i] = dv.getUint32(i * 4, true);
+        }
+
+        const me_key = new Uint32Array(4);
+        const mo_key = new Uint32Array(4);
+
+        for (let i = 0; i < this.k_len; i++) {
+            const a = key_words[i * 2];
+            const b = key_words[i * 2 + 1];
+            me_key[i] = a;
+            mo_key[i] = b;
+            this.s_key[this.k_len - i - 1] = this.mds_rem(a, b);
+        }
+
+        for (let i = 0; i < 40; i += 2) {
+            let a = ((0x01010101 * i) >>> 0);
+            let b = ((a + 0x01010101) >>> 0);
+            a = this.h_fun(a, me_key);
+            b = rotl32(this.h_fun(b, mo_key), 8);
+            this.l_key[i] = ((a + b) >>> 0);
+            this.l_key[i + 1] = rotl32(((a + ((2 * b) >>> 0)) >>> 0), 9);
+        }
+
+        this.gen_mk_tab(this.s_key);
+    }
+
+    encrypt_block(in_blk) {
+        const dv = new DataView(in_blk.buffer, in_blk.byteOffset, 16);
+        let b0 = (dv.getUint32(0, true) ^ this.l_key[0]) >>> 0;
+        let b1 = (dv.getUint32(4, true) ^ this.l_key[1]) >>> 0;
+        let b2 = (dv.getUint32(8, true) ^ this.l_key[2]) >>> 0;
+        let b3 = (dv.getUint32(12, true) ^ this.l_key[3]) >>> 0;
+
+        for (let i = 0; i < 8; i++) {
+            const t1 = (this.mk_tab[0][byte(b1, 3)] ^ this.mk_tab[1][byte(b1, 0)] ^ this.mk_tab[2][byte(b1, 1)] ^ this.mk_tab[3][byte(b1, 2)]) >>> 0;
+            const t0 = (this.mk_tab[0][byte(b0, 0)] ^ this.mk_tab[1][byte(b0, 1)] ^ this.mk_tab[2][byte(b0, 2)] ^ this.mk_tab[3][byte(b0, 3)]) >>> 0;
+
+            b2 = rotr32(b2 ^ (((t0 + t1 + this.l_key[4 * i + 8]) >>> 0)), 1);
+            b3 = rotl32(b3, 1) ^ (((t0 + ((2 * t1) >>> 0) + this.l_key[4 * i + 9]) >>> 0));
+
+            const t1_2 = (this.mk_tab[0][byte(b3, 3)] ^ this.mk_tab[1][byte(b3, 0)] ^ this.mk_tab[2][byte(b3, 1)] ^ this.mk_tab[3][byte(b3, 2)]) >>> 0;
+            const t0_2 = (this.mk_tab[0][byte(b2, 0)] ^ this.mk_tab[1][byte(b2, 1)] ^ this.mk_tab[2][byte(b2, 2)] ^ this.mk_tab[3][byte(b2, 3)]) >>> 0;
+
+            b0 = rotr32(b0 ^ (((t0_2 + t1_2 + this.l_key[4 * i + 10]) >>> 0)), 1);
+            b1 = rotl32(b1, 1) ^ (((t0_2 + ((2 * t1_2) >>> 0) + this.l_key[4 * i + 11]) >>> 0));
+        }
+
+        const out = new Uint8Array(16);
+        const out_dv = new DataView(out.buffer);
+        out_dv.setUint32(0, (b2 ^ this.l_key[4]) >>> 0, true);
+        out_dv.setUint32(4, (b3 ^ this.l_key[5]) >>> 0, true);
+        out_dv.setUint32(8, (b0 ^ this.l_key[6]) >>> 0, true);
+        out_dv.setUint32(12, (b1 ^ this.l_key[7]) >>> 0, true);
+        return out;
+    }
+}
+
+/* -------------------------------------------------------------
+   CMAC, CTR, EAX Modes of Operation
+------------------------------------------------------------- */
+const BLOCK_SIZE = 16;
+
+function xor_bytes(a, b) {
+    const res = new Uint8Array(a.length);
+    for (let i = 0; i < a.length; i++) {
+        res[i] = a[i] ^ b[i];
+    }
+    return res;
+}
+
+function left_shift_one(bitstring) {
+    const out = new Uint8Array(bitstring.length);
+    let carry = 0;
+    for (let i = bitstring.length - 1; i >= 0; i--) {
+        const newVal = (bitstring[i] << 1) & 0xff;
+        out[i] = (newVal | carry) & 0xff;
+        carry = (bitstring[i] & 0x80) >>> 7;
+    }
+    return out;
+}
+
+function generate_subkeys(encrypt_block) {
+    const const_rb = 0x87;
+    const zero = new Uint8Array(BLOCK_SIZE);
+    const L = encrypt_block(zero);
+
+    let K1 = left_shift_one(L);
+    if (L[0] & 0x80) {
+        const rb = new Uint8Array(16);
+        rb[15] = const_rb;
+        K1 = xor_bytes(K1, rb);
+    }
+
+    let K2 = left_shift_one(K1);
+    if (K1[0] & 0x80) {
+        const rb = new Uint8Array(16);
+        rb[15] = const_rb;
+        K2 = xor_bytes(K2, rb);
+    }
+
+    return [K1, K2];
+}
+
+function pad(block) {
+    const padded = new Uint8Array(BLOCK_SIZE);
+    padded.set(block);
+    padded[block.length] = 0x80;
+    return padded;
+}
+
+class CMAC {
+    constructor(encrypt_block) {
+        this.encrypt_block = encrypt_block;
+        [this.K1, this.K2] = generate_subkeys(encrypt_block);
+    }
+
+    digest(data) {
+        let last;
+        const blocks = [];
+        if (data.length === 0) {
+            last = xor_bytes(pad(new Uint8Array(0)), this.K2);
+        } else {
+            for (let i = 0; i < data.length; i += BLOCK_SIZE) {
+                blocks.push(data.subarray(i, Math.min(i + BLOCK_SIZE, data.length)));
+            }
+            const lastBlock = blocks[blocks.length - 1];
+            if (lastBlock.length === BLOCK_SIZE) {
+                last = xor_bytes(lastBlock, this.K1);
+                blocks.pop();
+            } else {
+                last = xor_bytes(pad(lastBlock), this.K2);
+                blocks.pop();
+            }
+        }
+
+        let X = new Uint8Array(BLOCK_SIZE);
+        for (const block of blocks) {
+            X = this.encrypt_block(xor_bytes(X, block));
+        }
+
+        return this.encrypt_block(xor_bytes(X, last));
+    }
+}
+
+function inc_counter_be(counter) {
+    for (let i = BLOCK_SIZE - 1; i >= 0; i--) {
+        counter[i] = (counter[i] + 1) & 0xff;
+        if (counter[i] !== 0) break;
+    }
+}
+
+class CTR {
+    constructor(encrypt_block, initial_counter) {
+        this.encrypt_block = encrypt_block;
+        this.counter = new Uint8Array(initial_counter);
+    }
+
+    process(data) {
+        const out = new Uint8Array(data.length);
+        let offset = 0;
+        while (offset < data.length) {
+            const keystream = this.encrypt_block(this.counter);
+            inc_counter_be(this.counter);
+
+            const len = Math.min(BLOCK_SIZE, data.length - offset);
+            for (let i = 0; i < len; i++) {
+                out[offset + i] = data[offset + i] ^ keystream[i];
+            }
+            offset += BLOCK_SIZE;
+        }
+        return out;
+    }
+}
+
+function _omac_with_prefix(cmac, prefix, data) {
+    const P = new Uint8Array(BLOCK_SIZE + data.length);
+    P[BLOCK_SIZE - 1] = prefix;
+    P.set(data, BLOCK_SIZE);
+    return cmac.digest(P);
+}
+
+class EAX {
+    constructor(encrypt_block) {
+        this.encrypt_block = encrypt_block;
+        this.cmac = new CMAC(encrypt_block);
+    }
+
+    encrypt(nonce, plaintext, aad = new Uint8Array(0)) {
+        const n_tag = _omac_with_prefix(this.cmac, 0x00, nonce);
+        const h_tag = _omac_with_prefix(this.cmac, 0x01, aad);
+
+        const ctr = new CTR(this.encrypt_block, n_tag);
+        const ciphertext = ctr.process(plaintext);
+
+        const c_tag = _omac_with_prefix(this.cmac, 0x02, ciphertext);
+        const tag = xor_bytes(xor_bytes(n_tag, h_tag), c_tag);
+
+        return [ciphertext, tag];
+    }
+
+    decrypt(nonce, ciphertext, tag, aad = new Uint8Array(0)) {
+        const n_tag = _omac_with_prefix(this.cmac, 0x00, nonce);
+        const ctr = new CTR(this.encrypt_block, n_tag);
+        const plaintext = ctr.process(ciphertext);
+
+        const h_tag = _omac_with_prefix(this.cmac, 0x01, aad);
+        const c_tag = _omac_with_prefix(this.cmac, 0x02, ciphertext);
+
+        const expected_tag = xor_bytes(xor_bytes(n_tag, h_tag), c_tag);
+        for (let i = 0; i < BLOCK_SIZE; i++) {
+            if (expected_tag[i] !== tag[i]) {
+                throw new Error("EAX authentication failed");
+            }
+        }
+        return plaintext;
+    }
+}
+
+/* -------------------------------------------------------------
+   Packet Tracer Obfuscation & Qt Compression
+------------------------------------------------------------- */
+function deobf_stage1(data) {
+    const L = data.length;
+    const out = new Uint8Array(L);
+    for (let i = 0; i < L; i++) {
+        const key_byte = ((L - (i * L)) & 0xff);
+        out[i] = data[L - 1 - i] ^ key_byte;
+    }
+    return out;
+}
+
+function obf_stage1(data) {
+    const L = data.length;
+    const out = new Uint8Array(L);
+    for (let i = 0; i < L; i++) {
+        const key_byte = ((L - (i * L)) & 0xff);
+        out[L - 1 - i] = data[i] ^ key_byte;
+    }
+    return out;
+}
+
+function deobf_stage2(data) {
+    const L = data.length;
+    const out = new Uint8Array(L);
+    for (let i = 0; i < L; i++) {
+        out[i] = data[i] ^ ((L - i) & 0xff);
+    }
+    return out;
+}
+
+function obf_stage2(data) {
+    const L = data.length;
+    const out = new Uint8Array(L);
+    for (let i = 0; i < L; i++) {
+        out[i] = data[i] ^ ((L - i) & 0xff);
+    }
+    return out;
+}
+
+async function decompress_qt(blob) {
+    const dv = new DataView(blob.buffer, blob.byteOffset, 4);
+    const origSize = dv.getUint32(0, false);
+    const compressed = blob.subarray(4);
+
+    const ds = new DecompressionStream("deflate");
+    const writer = ds.writable.getWriter();
+    writer.write(compressed);
+    writer.close();
+
+    const reader = ds.readable.getReader();
+    const chunks = [];
+    let received = 0;
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        received += value.length;
+    }
+    const combined = new Uint8Array(received);
+    let offset = 0;
+    for (const chunk of chunks) {
+        combined.set(chunk, offset);
+        offset += chunk.length;
+    }
+    return combined.subarray(0, origSize);
+}
+
+async function compress_qt(xmlBytes) {
+    const origSize = xmlBytes.length;
+    const header = new Uint8Array(4);
+    new DataView(header.buffer).setUint32(0, origSize, false);
+
+    const cs = new CompressionStream("deflate");
+    const writer = cs.writable.getWriter();
+    writer.write(xmlBytes);
+    writer.close();
+
+    const reader = cs.readable.getReader();
+    const chunks = [];
+    let received = 0;
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        received += value.length;
+    }
+    const combined = new Uint8Array(4 + received);
+    combined.set(header, 0);
+    let offset = 4;
+    for (const chunk of chunks) {
+        combined.set(chunk, offset);
+        offset += chunk.length;
+    }
+    return combined;
+}
+
+const PT_KEY = new Uint8Array(16).fill(137);
+const PT_IV = new Uint8Array(16).fill(16);
+
+async function decryptPKA(pkaBytes) {
+    const stage1 = deobf_stage1(pkaBytes);
+    const tf = new Twofish(PT_KEY);
+    const eax = new EAX(b => tf.encrypt_block(b));
+
+    const ciphertext = stage1.subarray(0, stage1.length - 16);
+    const tag = stage1.subarray(stage1.length - 16);
+
+    const decrypted = eax.decrypt(PT_IV, ciphertext, tag);
+    const stage2 = deobf_stage2(decrypted);
+    const xmlBytes = await decompress_qt(stage2);
+    return xmlBytes;
+}
+
+async function encryptPKA(xmlBytes) {
+    const stage2_input = await compress_qt(xmlBytes);
+    const decrypted_blob = obf_stage2(stage2_input);
+
+    const tf = new Twofish(PT_KEY);
+    const eax = new EAX(b => tf.encrypt_block(b));
+    const [ciphertext, tag] = eax.encrypt(PT_IV, decrypted_blob);
+
+    const stage1_input = new Uint8Array(ciphertext.length + tag.length);
+    stage1_input.set(ciphertext, 0);
+    stage1_input.set(tag, ciphertext.length);
+
+    const final_pka = obf_stage1(stage1_input);
+    return final_pka;
+}
+
+/* -------------------------------------------------------------
+   XML Helpers & UI Binding
+------------------------------------------------------------- */
+function escapeXml(unsafe) {
+    return (unsafe || "").replace(/[<>&"\']/g, c => {
+        switch (c) {
+            case "<": return "&lt;";
+            case ">": return "&gt;";
+            case "&": return "&amp;";
+            case "\"": return "&quot;";
+            case "\'": return "&apos;";
+        }
+    });
+}
+
+function unescapeXml(safe) {
+    return (safe || "")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&amp;/g, "&")
+        .replace(/&quot;/g, "\"")
+        .replace(/&apos;/g, "\'");
+}
+
+let loadedXmlString = null;
+let originalFileName = "activity.pka";
+
+const dropzone = document.getElementById("dropzone");
+const fileInput = document.getElementById("fileInput");
+const fileInfo = document.getElementById("fileInfo");
+const fileNameSpan = document.getElementById("fileName");
+const fileSizeSpan = document.getElementById("fileSize");
+const btnDownload = document.getElementById("btnDownload");
+const toast = document.getElementById("toast");
+
+const profileName = document.getElementById("profileName");
+const profileEmail = document.getElementById("profileEmail");
+const profileInfo = document.getElementById("profileInfo");
+const timeHours = document.getElementById("timeHours");
+const timeMins = document.getElementById("timeMins");
+const timeSecs = document.getElementById("timeSecs");
+const msDisplay = document.getElementById("msDisplay");
+const startTimeInput = document.getElementById("startTimeInput");
+const checkLocked = document.getElementById("checkLocked");
+const checkNoGuest = document.getElementById("checkNoGuest");
+const checkApplyAll = document.getElementById("checkApplyAll");
+const autoCompleteCard = document.getElementById("autoCompleteCard");
+const autoBadge = document.getElementById("autoBadge");
+const btnAutoComplete = document.getElementById("btnAutoComplete");
+
+function showToast(message, isError = false) {
+    toast.className = `p-3.5 rounded-xl text-xs font-semibold border shadow-sm transition-all duration-300 ${
+        isError 
+        ? "bg-rose-50 text-rose-700 border-rose-200" 
+        : "bg-emerald-50 text-emerald-800 border-emerald-200"
+    }`;
+    toast.textContent = message;
+    toast.classList.remove("hidden");
+    setTimeout(() => {
+        toast.classList.add("hidden");
+    }, 4500);
+}
+
+function updateMsDisplay() {
+    const h = parseInt(timeHours.value || 0, 10);
+    const m = parseInt(timeMins.value || 0, 10);
+    const s = parseInt(timeSecs.value || 0, 10);
+    const ms = ((h * 3600) + (m * 60) + s) * 1000;
+    msDisplay.textContent = `總計：${ms.toLocaleString()} 毫秒`;
+}
+
+timeHours.addEventListener("input", updateMsDisplay);
+timeMins.addEventListener("input", updateMsDisplay);
+timeSecs.addEventListener("input", updateMsDisplay);
+
+function setPresetTime(h, m, s) {
+    timeHours.value = h;
+    timeMins.value = m;
+    timeSecs.value = s;
+    updateMsDisplay();
+    showToast(`已將作答時間設定為 ${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`);
+}
+
+document.getElementById("btnNowTime").addEventListener("click", () => {
+    const now = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    const str = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+    startTimeInput.value = str;
+    showToast("開始時間已設為目前時間");
+});
+
+document.getElementById("btnCalcTime").addEventListener("click", () => {
+    const h = parseInt(timeHours.value || 0, 10);
+    const m = parseInt(timeMins.value || 0, 10);
+    const s = parseInt(timeSecs.value || 0, 10);
+    const totalSec = (h * 3600) + (m * 60) + s;
+    const calc = new Date(Date.now() - (totalSec * 1000));
+    const pad = n => String(n).padStart(2, '0');
+    const str = `${calc.getFullYear()}-${pad(calc.getMonth()+1)}-${pad(calc.getDate())} ${pad(calc.getHours())}:${pad(calc.getMinutes())}:${pad(calc.getSeconds())}`;
+    startTimeInput.value = str;
+    showToast(`已自動推算開始時間：${str}`);
+});
+
+document.getElementById("btnResetGuest").addEventListener("click", () => {
+    profileName.value = "Guest";
+    profileEmail.value = "";
+    profileInfo.value = "";
+    checkLocked.checked = false;
+    showToast("已重設為 Guest (訪客) 身分");
+});
+
+document.getElementById("btnUnlockProfile").addEventListener("click", () => {
+    checkLocked.checked = false;
+    showToast("已解除鎖定，存檔後可於 Packet Tracer 內重新編輯");
+});
+
+btnAutoComplete.addEventListener("click", () => {
+    if (!loadedXmlString) return;
+
+    const ptRegex = /<PACKETTRACER5(?!\w)[\s\S]*?<\/PACKETTRACER5>/g;
+    const blocks = [];
+    let m;
+    while ((m = ptRegex.exec(loadedXmlString)) !== null) {
+        blocks.push({ start: m.index, end: ptRegex.lastIndex, content: m[0] });
+    }
+
+    if (blocks.length < 3) {
+        showToast("此檔案未包含標準解答拓撲！", true);
+        return;
+    }
+
+    const block0 = blocks[0].content;
+    const block1 = blocks[1].content;
+    const block2 = blocks[2].content;
+
+    // Preserve profile from block 0 if any
+    const p0Match = block0.match(/<USER_PROFILE>[\s\S]*?<\/USER_PROFILE>/);
+    const userProfileXml = p0Match ? p0Match[0] : "";
+
+    let solvedBlock0 = block2;
+    if (userProfileXml) {
+        solvedBlock0 = solvedBlock0.replace(/<USER_PROFILE>[\s\S]*?<\/USER_PROFILE>/, userProfileXml);
+    }
+
+    // Preserve PIXMAPBANK/MOVIEBANK
+    if (block0.includes("<PIXMAPBANK/>") && !solvedBlock0.includes("<PIXMAPBANK/>")) {
+        solvedBlock0 = solvedBlock0.replace(/<VERSION>(.*?)<\/VERSION>/, "<VERSION>$1</VERSION>\n  <PIXMAPBANK/>\n  <MOVIEBANK/>");
+    }
+
+    let solvedBlock1 = block2;
+    if (userProfileXml) {
+        solvedBlock1 = solvedBlock1.replace(/<USER_PROFILE>[\s\S]*?<\/USER_PROFILE>/, userProfileXml);
+    }
+
+    // Replace block 1 first, then block 0 (from right to left to prevent offset shifts)
+    let newXml = loadedXmlString.substring(0, blocks[1].start) + solvedBlock1 + loadedXmlString.substring(blocks[1].end);
+    newXml = newXml.substring(0, blocks[0].start) + solvedBlock0 + newXml.substring(blocks[0].start + block0.length);
+
+    // Disable LOAD_INIT_TREE so Packet Tracer does not force reload the empty initial state
+    newXml = newXml.replace(/<LOAD_INIT_TREE>true<\/LOAD_INIT_TREE>/g, "<LOAD_INIT_TREE>false</LOAD_INIT_TREE>");
+
+    loadedXmlString = newXml;
+
+    autoBadge.classList.remove("hidden");
+    showToast("🎉 已依照題目指示自動完成！所有連線與配置皆已同步至 100% 解答！");
+    lucide.createIcons();
+});
+
+// Dropzone Events
+dropzone.addEventListener("click", () => fileInput.click());
+dropzone.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    dropzone.classList.add("border-blue-500", "bg-blue-50/50");
+});
+dropzone.addEventListener("dragleave", () => {
+    dropzone.classList.remove("border-blue-500", "bg-blue-50/50");
+});
+dropzone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    dropzone.classList.remove("border-blue-500", "bg-blue-50/50");
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+        processFile(e.dataTransfer.files[0]);
+    }
+});
+fileInput.addEventListener("change", (e) => {
+    if (e.target.files && e.target.files[0]) {
+        processFile(e.target.files[0]);
+    }
+});
+
+async function processFile(file) {
+    try {
+        originalFileName = file.name;
+        fileNameSpan.textContent = file.name;
+        fileSizeSpan.textContent = `(${(file.size / 1024).toFixed(1)} KB)`;
+        fileInfo.classList.remove("hidden");
+        fileInfo.classList.add("flex");
+
+        showToast("正在本機端解密 PKA 檔案...");
+        const buffer = await file.arrayBuffer();
+        const pkaBytes = new Uint8Array(buffer);
+
+        const xmlBytes = await decryptPKA(pkaBytes);
+        loadedXmlString = new TextDecoder("utf-8").decode(xmlBytes);
+
+        // Parse User Profile
+        const profileRegex = /<USER_PROFILE>[\s\S]*?(?:<NAME>(.*?)<\/NAME>|<NAME\s*\/>)[\s\S]*?(?:<EMAIL>(.*?)<\/EMAIL>|<EMAIL\s*\/>)[\s\S]*?(?:<ADDITIONAL_INFO>([\s\S]*?)<\/ADDITIONAL_INFO>|<ADDITIONAL_INFO\s*\/>)[\s\S]*?<\/USER_PROFILE>/;
+        const match = profileRegex.exec(loadedXmlString);
+        if (match) {
+            profileName.value = unescapeXml(match[1] || "");
+            profileEmail.value = unescapeXml(match[2] || "");
+            profileInfo.value = unescapeXml(match[3] || "");
+        } else {
+            profileName.value = "";
+            profileEmail.value = "";
+            profileInfo.value = "";
+        }
+
+        // Parse Lock status
+        const lockedMatch = /<USER_PROFILE_LOCKED>(.*?)<\/USER_PROFILE_LOCKED>/.exec(loadedXmlString);
+        checkLocked.checked = lockedMatch ? (lockedMatch[1].trim().toLowerCase() === "true") : false;
+
+        // Parse NoGuest status
+        const noGuestMatch = /<USER_PROFILE_NOGUEST>(.*?)<\/USER_PROFILE_NOGUEST>/.exec(loadedXmlString);
+        checkNoGuest.checked = noGuestMatch ? (noGuestMatch[1].trim().toLowerCase() === "true") : false;
+
+        // Parse ELAPSED
+        const elapsedMatch = /ELAPSED="(\d+)"/.exec(loadedXmlString);
+        let elapsedMs = elapsedMatch ? parseInt(elapsedMatch[1], 10) : 0;
+        const totalSec = Math.floor(elapsedMs / 1000);
+        timeHours.value = Math.floor(totalSec / 3600);
+        timeMins.value = Math.floor((totalSec % 3600) / 60);
+        timeSecs.value = totalSec % 60;
+        updateMsDisplay();
+
+        // Parse START_TIMESTAMP
+        const startMatch = /<START_TIMESTAMP>(.*?)<\/START_TIMESTAMP>/.exec(loadedXmlString);
+        startTimeInput.value = startMatch ? unescapeXml(startMatch[1]) : "";
+
+        // Check for Answer Network blocks
+        const ptCount = (loadedXmlString.match(/<PACKETTRACER5\b/g) || []).length;
+        if (ptCount >= 3) {
+            autoCompleteCard.classList.remove("hidden");
+            autoBadge.classList.add("hidden");
+        } else {
+            autoCompleteCard.classList.add("hidden");
+        }
+        lucide.createIcons();
+
+        btnDownload.disabled = false;
+        showToast("解密成功！已載入檔案資料，請依需求修改後點擊下載。");
+    } catch (err) {
+        console.error(err);
+        showToast("解密失敗：" + err.message, true);
+        autoCompleteCard.classList.add("hidden");
+        btnDownload.disabled = true;
+    }
+}
+
+// Download Button
+btnDownload.addEventListener("click", async () => {
+    if (!loadedXmlString) return;
+
+    try {
+        btnDownload.disabled = true;
+        btnDownload.innerHTML = `<span class="inline-block animate-spin mr-2">⏳</span><span>打包加密中...</span>`;
+
+        const escName = escapeXml(profileName.value.trim());
+        const escEmail = escapeXml(profileEmail.value.trim());
+        const escInfo = escapeXml(profileInfo.value.trim());
+
+        const h = parseInt(timeHours.value || 0, 10);
+        const m = parseInt(timeMins.value || 0, 10);
+        const s = parseInt(timeSecs.value || 0, 10);
+        const elapsedMs = ((h * 3600) + (m * 60) + s) * 1000;
+
+        const startTs = escapeXml(startTimeInput.value.trim());
+        const locked = checkLocked.checked;
+        const noguest = checkNoGuest.checked;
+        const applyAll = checkApplyAll.checked;
+
+        // 1. Update Profile in XML
+        let newXml = loadedXmlString;
+        const replacement = `<USER_PROFILE>\n   <NAME>${escName}</NAME>\n   <EMAIL>${escEmail}</EMAIL>\n   <ADDITIONAL_INFO>${escInfo}</ADDITIONAL_INFO>\n  </USER_PROFILE>`;
+        const profileRegex = /<USER_PROFILE>[\s\S]*?(?:<NAME>(.*?)<\/NAME>|<NAME\s*\/>)[\s\S]*?(?:<EMAIL>(.*?)<\/EMAIL>|<EMAIL\s*\/>)[\s\S]*?(?:<ADDITIONAL_INFO>([\s\S]*?)<\/ADDITIONAL_INFO>|<ADDITIONAL_INFO\s*\/>)[\s\S]*?<\/USER_PROFILE>/g;
+
+        let count = 0;
+        newXml = newXml.replace(profileRegex, (match) => {
+            if (!applyAll && count > 0) return match;
+            count++;
+            return replacement;
+        });
+
+        // 2. Update Locked & NoGuest
+        newXml = newXml.replace(/<USER_PROFILE_LOCKED>.*?<\/USER_PROFILE_LOCKED>/g, `<USER_PROFILE_LOCKED>${locked ? "true" : "false"}</USER_PROFILE_LOCKED>`);
+        newXml = newXml.replace(/<USER_PROFILE_NOGUEST>.*?<\/USER_PROFILE_NOGUEST>/g, `<USER_PROFILE_NOGUEST>${noguest ? "true" : "false"}</USER_PROFILE_NOGUEST>`);
+
+        // 3. Update ELAPSED
+        newXml = newXml.replace(/ELAPSED="\d+"/g, `ELAPSED="${elapsedMs}"`);
+
+        // 4. Update START_TIMESTAMP
+        if (startTs) {
+            newXml = newXml.replace(/<START_TIMESTAMP>.*?<\/START_TIMESTAMP>/g, `<START_TIMESTAMP>${startTs}</START_TIMESTAMP>`);
+        }
+
+        // Encrypt back to PKA
+        const xmlBytes = new TextEncoder().encode(newXml);
+        const encryptedPka = await encryptPKA(xmlBytes);
+
+        // Trigger file download
+        const blob = new Blob([encryptedPka], { type: "application/octet-stream" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        const dotIdx = originalFileName.lastIndexOf(".");
+        const baseName = dotIdx !== -1 ? originalFileName.substring(0, dotIdx) : originalFileName;
+        const ext = dotIdx !== -1 ? originalFileName.substring(dotIdx) : ".pka";
+        a.download = `${baseName}_modified${ext}`;
+        a.href = url;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        showToast("打包完成！已自動開始下載修改後的檔案。");
+    } catch (err) {
+        console.error(err);
+        showToast("打包失敗：" + err.message, true);
+    } finally {
+        btnDownload.disabled = false;
+        btnDownload.innerHTML = `
+            <i data-lucide="download" class="w-5 h-5"></i>
+            <span>下載修改後的 PKA 檔案</span>
+        `;
+        lucide.createIcons();
+    }
+});
+</script>
+</body>
+</html>
