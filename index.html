@@ -65,19 +65,23 @@
     </div>
 
     <!-- Auto Complete Card -->
-    <div id="autoCompleteCard" class="hidden bg-gradient-to-r from-blue-50/90 via-indigo-50/90 to-purple-50/90 rounded-2xl p-5 border border-blue-200/80 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all">
-        <div class="space-y-1">
-            <div class="flex items-center gap-1.5 text-xs font-bold text-blue-900">
-                <i data-lucide="sparkles" class="w-4 h-4 text-blue-600"></i>
-                <span>題目解答自動同步 (Auto-Complete)</span>
-                <span id="autoBadge" class="hidden px-2 py-0.5 text-[10px] font-semibold bg-emerald-100 text-emerald-800 rounded-full border border-emerald-300">已套用 100% 解答</span>
+    <div id="autoCompleteCard" class="hidden bg-gradient-to-r from-blue-50/90 via-indigo-50/90 to-purple-50/90 rounded-2xl p-5 border border-blue-200/80 shadow-sm flex flex-col gap-3 transition-all">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div class="space-y-1">
+                <div class="flex items-center gap-1.5 text-xs font-bold text-blue-900 flex-wrap">
+                    <i data-lucide="sparkles" class="w-4 h-4 text-blue-600"></i>
+                    <span>題目解答自動同步 (Auto-Complete)</span>
+                    <span id="autoBadge" class="hidden px-2 py-0.5 text-[10px] font-semibold bg-emerald-100 text-emerald-800 rounded-full border border-emerald-300">已套用 100% 解答</span>
+                    <span id="varBadge" class="hidden px-2 py-0.5 text-[10px] font-semibold bg-purple-100 text-purple-800 rounded-full border border-purple-300">✨ 動態變數 (Variable Manager)</span>
+                </div>
+                <p id="autoDesc" class="text-[11px] text-slate-500">已在題目中偵測到標準解答拓撲，可一鍵自動完成所有連線與設備配置</p>
             </div>
-            <p class="text-[11px] text-slate-500">已在題目中偵測到標準解答拓撲，可一鍵自動完成所有連線與設備配置</p>
+            <button type="button" id="btnAutoComplete" class="px-4 py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 active:scale-[0.98] rounded-xl shadow-sm shadow-blue-500/20 whitespace-nowrap transition flex items-center justify-center gap-1.5 self-start sm:self-auto">
+                <i data-lucide="wand-2" class="w-3.5 h-3.5"></i>
+                <span>一鍵自動完成題目</span>
+            </button>
         </div>
-        <button type="button" id="btnAutoComplete" class="px-4 py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 active:scale-[0.98] rounded-xl shadow-sm shadow-blue-500/20 whitespace-nowrap transition flex items-center justify-center gap-1.5">
-            <i data-lucide="wand-2" class="w-3.5 h-3.5"></i>
-            <span>一鍵自動完成題目</span>
-        </button>
+        <div id="varDetails" class="hidden p-2.5 bg-purple-50/80 border border-purple-200/80 rounded-xl text-[11px] text-purple-900 space-y-1"></div>
     </div>
 
     <!-- Step 2: User Profile Editor -->
@@ -756,6 +760,9 @@ const checkNoGuest = document.getElementById("checkNoGuest");
 const checkApplyAll = document.getElementById("checkApplyAll");
 const autoCompleteCard = document.getElementById("autoCompleteCard");
 const autoBadge = document.getElementById("autoBadge");
+const varBadge = document.getElementById("varBadge");
+const autoDesc = document.getElementById("autoDesc");
+const varDetails = document.getElementById("varDetails");
 const btnAutoComplete = document.getElementById("btnAutoComplete");
 
 function showToast(message, isError = false) {
@@ -824,6 +831,119 @@ document.getElementById("btnUnlockProfile").addEventListener("click", () => {
     showToast("已解除鎖定，存檔後可於 Packet Tracer 內重新編輯");
 });
 
+function extractDynamicVariables(xmlStr) {
+    if (!xmlStr) return {};
+    const vmMatch = xmlStr.match(/<VARIABLE_MANAGER>[\s\S]*?<\/VARIABLE_MANAGER>/);
+    const variables = {};
+    if (vmMatch) {
+        const varRegex = /<([A-Z_]+VAR)>\s*<NAME>(.*?)<\/NAME>[\s\S]*?<VALUE>(.*?)<\/VALUE>/g;
+        let vm;
+        while ((vm = varRegex.exec(vmMatch[0])) !== null) {
+            variables[vm[2].trim()] = vm[3].trim();
+        }
+    }
+    return variables;
+}
+
+function adaptDynamicVariables(xmlStr, solvedBlock, studentId) {
+    const variables = extractDynamicVariables(xmlStr);
+    const varKeys = Object.keys(variables);
+    if (varKeys.length === 0) {
+        return { solvedBlock, updatedXml: xmlStr, count: 0, variables: {} };
+    }
+
+    const compMatch = xmlStr.match(/<COMPARISONS>[\s\S]*?<\/COMPARISONS>/);
+    let updatedComp = compMatch ? compMatch[0] : "";
+    let updatedBlock = solvedBlock;
+
+    const resolveTemplate = (tpl) => {
+        let res = tpl;
+        for (const [k, v] of Object.entries(variables)) {
+            res = res.replaceAll(`[[${k}]]`, v);
+        }
+        return res;
+    };
+
+    if (compMatch) {
+        const nameRegex = /<NAME([^>]*)>(.*?)<\/NAME>/g;
+        let nm;
+        while ((nm = nameRegex.exec(compMatch[0])) !== null) {
+            const attrs = nm[1];
+            const label = nm[2];
+            if (attrs.includes('checkType="2"') && attrs.includes('variableName="')) {
+                const vnMatch = attrs.match(/variableName="([^"]+)"/);
+                const nvMatch = attrs.match(/nodeValue="([^"]*)"/);
+                if (vnMatch) {
+                    const varTemplate = vnMatch[1];
+                    const defaultValue = nvMatch ? nvMatch[1] : "";
+                    const resolvedValue = resolveTemplate(varTemplate);
+
+                    if (defaultValue && resolvedValue && defaultValue !== resolvedValue) {
+                        const oldAttr = `nodeValue="${defaultValue}" variableName="${varTemplate}"`;
+                        const newAttr = `nodeValue="${resolvedValue}" variableName="${varTemplate}"`;
+                        updatedComp = updatedComp.replace(oldAttr, newAttr);
+
+                        if (label === "Host Name") {
+                            updatedBlock = updatedBlock.replaceAll(`<SYS_NAME>${defaultValue}</SYS_NAME>`, `<SYS_NAME>${resolvedValue}</SYS_NAME>`);
+                            updatedBlock = updatedBlock.replaceAll(`<LINE>hostname ${defaultValue}</LINE>`, `<LINE>hostname ${resolvedValue}</LINE>`);
+                            updatedBlock = updatedBlock.replaceAll(`<KEY_NAME>${defaultValue}.`, `<KEY_NAME>${resolvedValue}.`);
+                            updatedBlock = updatedBlock.replaceAll(`<TEMP_KEY_NAME>${defaultValue}.`, `<TEMP_KEY_NAME>${resolvedValue}.`);
+                        } else if (label === "Password" || label.toLowerCase().includes("console")) {
+                            updatedBlock = updatedBlock.replace(
+                                /(<LINE>line con 0<\/LINE>\s*<LINE>\s*password )\S+(<\/LINE>)/,
+                                `$1${resolvedValue}$2`
+                            );
+                        } else if (label === "Enable Password") {
+                            updatedBlock = updatedBlock.replace(
+                                /(<LINE>enable password )\S+(<\/LINE>)/,
+                                `$1${resolvedValue}$2`
+                            );
+                        } else if (label === "Username" || label.toLowerCase().includes("user")) {
+                            const defParts = defaultValue.split(/\s+/);
+                            const resParts = resolvedValue.split(/\s+/);
+                            if (defParts.length >= 2 && resParts.length >= 2) {
+                                const uName = resParts[0];
+                                const uPass = resParts[resParts.length - 1];
+                                const uRegex = new RegExp(`(<LINE>username\\s+${uName}\\s+privilege\\s+\\d+\\s+password\\s+\\d+\\s+)\\S+(<\/LINE>)`);
+                                updatedBlock = updatedBlock.replace(uRegex, `$1${uPass}$2`);
+                            }
+                        } else if (label === "IP Address" || label.includes("IP")) {
+                            updatedBlock = updatedBlock.replaceAll(`<IP>${defaultValue}</IP>`, `<IP>${resolvedValue}</IP>`);
+                            updatedBlock = updatedBlock.replaceAll(new RegExp(`(<LINE>\\s*ip address\\s+)${defaultValue}`, "g"), `$1${resolvedValue}`);
+                        } else if (label.includes("Gateway")) {
+                            updatedBlock = updatedBlock.replaceAll(`<GATEWAY>${defaultValue}</GATEWAY>`, `<GATEWAY>${resolvedValue}</GATEWAY>`);
+                            updatedBlock = updatedBlock.replaceAll(`<PORT_GATEWAY>${defaultValue}</PORT_GATEWAY>`, `<PORT_GATEWAY>${resolvedValue}</PORT_GATEWAY>`);
+                            updatedBlock = updatedBlock.replaceAll(new RegExp(`(<LINE>\\s*ip default-gateway\\s+)${defaultValue}`, "g"), `$1${resolvedValue}`);
+                        } else if (label.includes("Mask") || label.includes("Subnet")) {
+                            updatedBlock = updatedBlock.replaceAll(`<SUBNET>${defaultValue}</SUBNET>`, `<SUBNET>${resolvedValue}</SUBNET>`);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (studentId) {
+        const idMatch = studentId.match(/\d{3}$/);
+        if (idMatch) {
+            const uCode = "U" + idMatch[0];
+            if (xmlStr.includes("Uxxx") && !updatedBlock.includes(`username ${uCode}`)) {
+                updatedBlock = updatedBlock.replace(
+                    /(<LINE>username\s+\S+\s+privilege\s+\d+\s+password\s+\d+\s+\S+<\/LINE>)/,
+                    `$1\n       <LINE>username ${uCode} privilege 1 password 0 123456</LINE>`
+                );
+            }
+        }
+    }
+
+    let updatedXml = xmlStr;
+    if (compMatch) {
+        updatedXml = updatedXml.substring(0, compMatch.index) + updatedComp + updatedXml.substring(compMatch.index + compMatch[0].length);
+    }
+
+    return { solvedBlock: updatedBlock, updatedXml, count: varKeys.length, variables };
+}
+
 btnAutoComplete.addEventListener("click", () => {
     if (!loadedXmlString) return;
 
@@ -847,7 +967,11 @@ btnAutoComplete.addEventListener("click", () => {
     const p0Match = block0.match(/<USER_PROFILE>[\s\S]*?<\/USER_PROFILE>/);
     const userProfileXml = p0Match ? p0Match[0] : "";
 
-    let solvedBlock0 = block2;
+    // Adapt dynamic variables
+    const { solvedBlock, updatedXml, count } = adaptDynamicVariables(loadedXmlString, block2, profileEmail.value.trim());
+    loadedXmlString = updatedXml;
+
+    let solvedBlock0 = solvedBlock;
     if (userProfileXml) {
         solvedBlock0 = solvedBlock0.replace(/<USER_PROFILE>[\s\S]*?<\/USER_PROFILE>/, userProfileXml);
     }
@@ -857,7 +981,7 @@ btnAutoComplete.addEventListener("click", () => {
         solvedBlock0 = solvedBlock0.replace(/<VERSION>(.*?)<\/VERSION>/, "<VERSION>$1</VERSION>\n  <PIXMAPBANK/>\n  <MOVIEBANK/>");
     }
 
-    let solvedBlock1 = block2;
+    let solvedBlock1 = solvedBlock;
     if (userProfileXml) {
         solvedBlock1 = solvedBlock1.replace(/<USER_PROFILE>[\s\S]*?<\/USER_PROFILE>/, userProfileXml);
     }
@@ -872,7 +996,11 @@ btnAutoComplete.addEventListener("click", () => {
     loadedXmlString = newXml;
 
     autoBadge.classList.remove("hidden");
-    showToast("🎉 已依照題目指示自動完成！所有連線與配置皆已同步至 100% 解答！");
+    if (count > 0) {
+        showToast(`🎉 已依照題目指示自動完成！已適配 ${count} 組隨機動態變數，拓撲與配置皆已同步至 100% 解答！`);
+    } else {
+        showToast("🎉 已依照題目指示自動完成！所有連線與配置皆已同步至 100% 解答！");
+    }
     lucide.createIcons();
 });
 
@@ -952,8 +1080,33 @@ async function processFile(file) {
         if (ptCount >= 3) {
             autoCompleteCard.classList.remove("hidden");
             autoBadge.classList.add("hidden");
+
+            // Check for Dynamic Variables
+            const vars = extractDynamicVariables(loadedXmlString);
+            const varList = Object.entries(vars);
+            if (varList.length > 0) {
+                varBadge.classList.remove("hidden");
+                autoDesc.textContent = "已偵測到標準解答拓撲與動態題目變數，點擊將一鍵完成所有連線，並自動精準適配隨機題意參數！";
+                varDetails.classList.remove("hidden");
+                varDetails.innerHTML = `
+                    <div class="font-semibold text-purple-900 flex items-center gap-1">
+                        <i data-lucide="info" class="w-3.5 h-3.5"></i>
+                        <span>已自動解析出題目指派之隨機變數 (${varList.length} 組)：</span>
+                    </div>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-1.5 mt-1 text-[10px] text-purple-800">
+                        ${varList.map(([k, v]) => `<div class="bg-purple-100/70 px-2 py-0.5 rounded border border-purple-200 truncate"><span class="font-mono font-medium">${k}</span> = <span class="font-bold">${v}</span></div>`).join("")}
+                    </div>
+                `;
+            } else {
+                varBadge.classList.add("hidden");
+                autoDesc.textContent = "已在題目中偵測到標準解答拓撲，可一鍵自動完成所有連線與設備配置";
+                varDetails.classList.add("hidden");
+                varDetails.innerHTML = "";
+            }
         } else {
             autoCompleteCard.classList.add("hidden");
+            varBadge.classList.add("hidden");
+            varDetails.classList.add("hidden");
         }
         lucide.createIcons();
 
@@ -963,6 +1116,8 @@ async function processFile(file) {
         console.error(err);
         showToast("解密失敗：" + err.message, true);
         autoCompleteCard.classList.add("hidden");
+        varBadge.classList.add("hidden");
+        varDetails.classList.add("hidden");
         btnDownload.disabled = true;
     }
 }
@@ -1011,6 +1166,18 @@ btnDownload.addEventListener("click", async () => {
         // 4. Update START_TIMESTAMP
         if (startTs) {
             newXml = newXml.replace(/<START_TIMESTAMP>.*?<\/START_TIMESTAMP>/g, `<START_TIMESTAMP>${startTs}</START_TIMESTAMP>`);
+        }
+
+        // 5. Ensure student ID user is added if Uxxx requirement exists
+        const idMatch = escEmail.match(/\d{3}$/);
+        if (idMatch && newXml.includes("Uxxx")) {
+            const uCode = "U" + idMatch[0];
+            if (!newXml.includes(`username ${uCode}`)) {
+                newXml = newXml.replace(
+                    /(<LINE>username\s+\S+\s+privilege\s+\d+\s+password\s+\d+\s+\S+<\/LINE>)/g,
+                    `$1\n       <LINE>username ${uCode} privilege 1 password 0 123456</LINE>`
+                );
+            }
         }
 
         // Encrypt back to PKA
