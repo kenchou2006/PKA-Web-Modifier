@@ -879,9 +879,10 @@ function adaptDynamicVariables(xmlStr, solvedBlock, studentId) {
                     const resolvedValue = resolveTemplate(varTemplate);
 
                     if (defaultValue && resolvedValue && defaultValue !== resolvedValue) {
-                        const oldAttr = `nodeValue="${defaultValue}" variableName="${varTemplate}"`;
-                        const newAttr = `nodeValue="${resolvedValue}" variableName="${varTemplate}"`;
-                        updatedComp = updatedComp.replace(oldAttr, newAttr);
+                        // 修正：精準取代該 assessment 節點中的 nodeValue，確保評分樹與動態變數同步
+                        const oldTag = nm[0];
+                        const newTag = oldTag.replace(/nodeValue="[^"]*"/, `nodeValue="${resolvedValue}"`);
+                        updatedComp = updatedComp.replace(oldTag, newTag);
 
                         if (label === "Host Name") {
                             updatedBlock = updatedBlock.replaceAll(`<SYS_NAME>${defaultValue}</SYS_NAME>`, `<SYS_NAME>${resolvedValue}</SYS_NAME>`);
@@ -890,12 +891,12 @@ function adaptDynamicVariables(xmlStr, solvedBlock, studentId) {
                             updatedBlock = updatedBlock.replaceAll(`<TEMP_KEY_NAME>${defaultValue}.`, `<TEMP_KEY_NAME>${resolvedValue}.`);
                         } else if (label === "Password" || label.toLowerCase().includes("console")) {
                             updatedBlock = updatedBlock.replace(
-                                /(<LINE>line con 0<\/LINE>\s*<LINE>\s*password )\S+(<\/LINE>)/,
+                                /(<LINE>line con 0<\/LINE>\s*<LINE>\s*password\s+)\S+(<\/LINE>)/g,
                                 `$1${resolvedValue}$2`
                             );
                         } else if (label === "Enable Password") {
                             updatedBlock = updatedBlock.replace(
-                                /(<LINE>enable password )\S+(<\/LINE>)/,
+                                /(<LINE>enable password\s+)\S+(<\/LINE>)/g,
                                 `$1${resolvedValue}$2`
                             );
                         } else if (label === "Username" || label.toLowerCase().includes("user")) {
@@ -904,7 +905,7 @@ function adaptDynamicVariables(xmlStr, solvedBlock, studentId) {
                             if (defParts.length >= 2 && resParts.length >= 2) {
                                 const uName = resParts[0];
                                 const uPass = resParts[resParts.length - 1];
-                                const uRegex = new RegExp(`(<LINE>username\\s+${uName}\\s+privilege\\s+\\d+\\s+password\\s+\\d+\\s+)\\S+(<\/LINE>)`);
+                                const uRegex = new RegExp(`(<LINE>username\\s+${uName}\\s+privilege\\s+\\d+\\s+password\\s+\\d+\\s+)\\S+(<\/LINE>)`, 'g');
                                 updatedBlock = updatedBlock.replace(uRegex, `$1${uPass}$2`);
                             }
                         } else if (label === "IP Address" || label.includes("IP")) {
@@ -929,7 +930,7 @@ function adaptDynamicVariables(xmlStr, solvedBlock, studentId) {
             const uCode = "U" + idMatch[0];
             if (xmlStr.includes("Uxxx") && !updatedBlock.includes(`username ${uCode}`)) {
                 updatedBlock = updatedBlock.replace(
-                    /(<LINE>username\s+\S+\s+privilege\s+\d+\s+password\s+\d+\s+\S+<\/LINE>)/,
+                    /(<LINE>username\s+\S+\s+privilege\s+\d+\s+password\s+\d+\s+\S+<\/LINE>)/g,
                     `$1\n       <LINE>username ${uCode} privilege 1 password 0 123456</LINE>`
                 );
             }
