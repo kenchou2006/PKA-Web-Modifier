@@ -1002,14 +1002,18 @@ function adaptDynamicVariables(xmlStr, solvedBlock, studentId) {
     updatedBlock = sanitizeDeviceConfigs(updatedBlock, resolvedHostname, domainName);
 
     if (studentId) {
-        const idMatch = studentId.match(/\d{3}$/);
+        const idMatch = studentId.match(/\d{3,}$/);
         if (idMatch) {
-            const uCode = "U" + idMatch[0];
+            const uCode = "U" + idMatch[0].slice(-3);
             if (xmlStr.includes("Uxxx") && !updatedBlock.includes(`username ${uCode}`)) {
-                updatedBlock = updatedBlock.replace(
-                    /(<LINE>username\s+\S+\s+privilege\s+\d+\s+password\s+\d+\s+\S+<\/LINE>)/g,
-                    `$1\n       <LINE>username ${uCode} privilege 1 password 0 123456</LINE>`
-                );
+                if (updatedBlock.includes("username U")) {
+                    updatedBlock = updatedBlock.replace(/<LINE>username\s+U\w+\s+privilege\s+\d+\s+password\s+\d+\s+\S+<\/LINE>/g, `<LINE>username ${uCode} privilege 1 password 0 123456</LINE>`);
+                } else {
+                    updatedBlock = updatedBlock.replace(
+                        /(<LINE>username\s+\S+\s+privilege\s+\d+\s+password\s+\d+\s+\S+<\/LINE>)/g,
+                        `$1\n       <LINE>username ${uCode} privilege 1 password 0 123456</LINE>`
+                    );
+                }
             }
         }
     }
@@ -1024,6 +1028,23 @@ function adaptDynamicVariables(xmlStr, solvedBlock, studentId) {
 
 btnAutoComplete.addEventListener("click", () => {
     if (!loadedXmlString) return;
+
+    // 若題目需要學號專屬帳號 (Uxxx)，但尚未填寫學號，主動彈出提示以確保 100% 滿分
+    if (loadedXmlString.includes("Uxxx")) {
+        let currentId = profileEmail.value.trim() || profileName.value.trim();
+        const idMatch = currentId.match(/\d{3,}$/);
+        if (!idMatch) {
+            const inputId = prompt("⚠️ 本題規範包含學號專屬帳號 (Uxxx，xxx為學號後三碼)。\n\n為確保獲得 100% 滿分，請輸入您的學號（例如 11410301）：", "");
+            if (inputId && inputId.trim()) {
+                profileEmail.value = inputId.trim();
+                if (!profileName.value.trim() || profileName.value.trim() === "Guest") {
+                    profileName.value = inputId.trim();
+                }
+            } else {
+                showToast("未輸入學號，將暫以預設帳號處理；強烈建議於「E-Mail / 學號」填入學號以確保滿分！", true);
+            }
+        }
+    }
 
     const ptRegex = /<PACKETTRACER5(?!\w)[\s\S]*?<\/PACKETTRACER5>/g;
     const blocks = [];
@@ -1046,8 +1067,8 @@ btnAutoComplete.addEventListener("click", () => {
     const userProfileXml = p0Match ? p0Match[0] : "";
 
     // Adapt dynamic variables & assessment tree
-    const { solvedBlock, updatedXml, count, resolvedHostname, domainName } = adaptDynamicVariables(loadedXmlString, block2, profileEmail.value.trim());
-    loadedXmlString = updatedXml;
+    const sId = profileEmail.value.trim() || profileName.value.trim();
+    const { solvedBlock, updatedXml, count, resolvedHostname, domainName } = adaptDynamicVariables(loadedXmlString, block2, sId);
 
     let solvedBlock0 = solvedBlock;
     if (userProfileXml) {
@@ -1067,10 +1088,13 @@ btnAutoComplete.addEventListener("click", () => {
     // Block 2 (Answer Network) 也必須同步淨化與變數適配，避免解答庫比對產生衝突
     let solvedBlock2 = sanitizeDeviceConfigs(solvedBlock, resolvedHostname, domainName);
 
-    // 由右至左 (block 2 -> block 1 -> block 0) 取代，避免偏移量位移
-    let newXml = loadedXmlString.substring(0, blocks[2].start) + solvedBlock2 + loadedXmlString.substring(blocks[2].end);
-    newXml = newXml.substring(0, blocks[1].start) + solvedBlock1 + newXml.substring(blocks[1].end);
-    newXml = newXml.substring(0, blocks[0].start) + solvedBlock0 + newXml.substring(blocks[0].start + block0.length);
+    // 精準重組 XML 結構（header + block0 + block1 + block2 + tail），杜絕任何偏移量計算錯誤
+    const header = updatedXml.substring(0, blocks[0].start);
+    const sep01 = updatedXml.substring(blocks[0].end, blocks[1].start);
+    const sep12 = updatedXml.substring(blocks[1].end, blocks[2].start);
+    const tail = updatedXml.substring(blocks[2].end);
+
+    let newXml = header + solvedBlock0 + sep01 + solvedBlock1 + sep12 + solvedBlock2 + tail;
 
     // Disable LOAD_INIT_TREE so Packet Tracer does not force reload the empty initial state
     newXml = newXml.replace(/<LOAD_INIT_TREE>true<\/LOAD_INIT_TREE>/g, "<LOAD_INIT_TREE>false</LOAD_INIT_TREE>");
@@ -1136,6 +1160,12 @@ async function processFile(file) {
             profileInfo.value = "";
         }
 
+        if (loadedXmlString.includes("Uxxx")) {
+            profileEmail.placeholder = "請輸入學號 (本題需要學號後三碼 Uxxx)";
+        } else {
+            profileEmail.placeholder = "請輸入 E-Mail 或學號";
+        }
+
         // Parse Lock status
         const lockedMatch = /<USER_PROFILE_LOCKED>(.*?)<\/USER_PROFILE_LOCKED>/.exec(loadedXmlString);
         checkLocked.checked = lockedMatch ? (lockedMatch[1].trim().toLowerCase() === "true") : false;
@@ -1178,6 +1208,11 @@ async function processFile(file) {
                     <div class="grid grid-cols-2 sm:grid-cols-3 gap-1.5 mt-1 text-[10px] text-purple-800">
                         ${varList.map(([k, v]) => `<div class="bg-purple-100/70 px-2 py-0.5 rounded border border-purple-200 truncate"><span class="font-mono font-medium">${k}</span> = <span class="font-bold">${v}</span></div>`).join("")}
                     </div>
+                    ${loadedXmlString.includes("Uxxx") ? `
+                    <div class="text-[11px] text-amber-800 bg-amber-50/90 border border-amber-200 rounded-lg p-2 flex items-start gap-1.5 mt-2">
+                        <i data-lucide="alert-circle" class="w-3.5 h-3.5 text-amber-600 mt-0.5 shrink-0"></i>
+                        <span><b>學號帳號提示：</b>題目要求建立專屬使用者 <code class="bg-amber-100 px-1 py-0.5 rounded font-mono font-bold text-amber-900">Uxxx</code> (xxx為學號後三碼)，請在「E-Mail / 學號」填寫您的學號以達成 100% 滿分！</span>
+                    </div>` : ""}
                 `;
             } else {
                 varBadge.classList.add("hidden");
@@ -1250,17 +1285,24 @@ btnDownload.addEventListener("click", async () => {
             newXml = newXml.replace(/<START_TIMESTAMP>.*?<\/START_TIMESTAMP>/g, `<START_TIMESTAMP>${startTs}</START_TIMESTAMP>`);
         }
 
-        // 5. Ensure student ID user is added if Uxxx requirement exists
-        const idMatch = escEmail.match(/\d{3}$/);
+        // 5. Ensure student ID user is added/synchronized if Uxxx requirement exists
+        const idStr = escEmail || escName;
+        const idMatch = idStr.match(/\d{3,}$/);
         if (idMatch && newXml.includes("Uxxx")) {
-            const uCode = "U" + idMatch[0];
+            const uCode = "U" + idMatch[0].slice(-3);
             if (!newXml.includes(`username ${uCode}`)) {
-                newXml = newXml.replace(
-                    /(<LINE>username\s+\S+\s+privilege\s+\d+\s+password\s+\d+\s+\S+<\/LINE>)/g,
-                    `$1\n       <LINE>username ${uCode} privilege 1 password 0 123456</LINE>`
-                );
+                if (newXml.includes("username U")) {
+                    newXml = newXml.replace(/<LINE>username\s+U\w+\s+privilege\s+\d+\s+password\s+\d+\s+\S+<\/LINE>/g, `<LINE>username ${uCode} privilege 1 password 0 123456</LINE>`);
+                } else {
+                    newXml = newXml.replace(
+                        /(<LINE>username\s+\S+\s+privilege\s+\d+\s+password\s+\d+\s+\S+<\/LINE>)/g,
+                        `$1\n       <LINE>username ${uCode} privilege 1 password 0 123456</LINE>`
+                    );
+                }
             }
         }
+
+        loadedXmlString = newXml;
 
         // Encrypt back to PKA
         const xmlBytes = new TextEncoder().encode(newXml);
